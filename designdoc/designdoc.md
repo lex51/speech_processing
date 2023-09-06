@@ -37,7 +37,7 @@
 - Категоризация интонаций голоса по аудиозаписям
 
 #### 2.2. Блок-схема решения  
-![Схема решения](https://github.com/lex51/speech_processing/tree/main/designdoc/iterations.png?raw=true)
+![Схема решения](https://github.com/lex51/speech_processing/tree/main/designdoc/iterations.png)
 
 #### 2.3. Этапы решения задачи   
 
@@ -70,7 +70,7 @@
 ### 3. Подготовка пилота  
 
 ##### Для реализации минимально функционала была выбрана следущая архитектура
-![Схема MVP](https://github.com/lex51/speech_processing/tree/main/designdoc/scheme.png?raw=true)
+![Схема MVP](https://github.com/lex51/speech_processing/tree/main/designdoc/scheme.png)
 
 #### 3.1. Способ оценки пилота  
   
