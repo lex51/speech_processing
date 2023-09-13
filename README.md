@@ -1,5 +1,5 @@
 # speech_processing
-ML System Design. Autumn 23/24 ![ссылка на курс](https://ods.ai/tracks/ml-system-design-23)
+ML System Design. Autumn 23/24 [ссылка на курс](https://ods.ai/tracks/ml-system-design-23)
 
 
 ## Цель проекта:
