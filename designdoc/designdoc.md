@@ -125,6 +125,8 @@
 
 ML-метрики будем сравнивать с **Baseline** от авторов датасета Dusha: https://github.com/salute-developers/golos/tree/master/dusha
 
+Тренировочный сет: https://www.kaggle.com/datasets/saspav/examples-of-calls
+
   
 #### 3.2. Что считаем успешным пилотом  
   
