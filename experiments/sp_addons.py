@@ -1,11 +1,11 @@
 import tempfile
 import pandas as pd
 import torch
+from math import ceil
 from glob import glob
 from pathlib import Path
-from tqdm import tqdm
-from math import ceil
 from statistics import mode as stat_mode
+
 from pydub import AudioSegment
 from transformers import HubertForSequenceClassification, Wav2Vec2FeatureExtractor
 
@@ -70,7 +70,7 @@ class AudioManipulation:
         :param max_duration: максимальная длительность аудиофайла
         :param debug: debug=True - режим отладки
         :param show_file_info: Печать информацию о файле: имя и длительность
-        :return: эмоция
+        :return: основная эмоция, список всех эмоций
         """
         temp_file_name, sound = self.convert_to_wav(path_to_file,
                                                     max_duration=max_duration,
@@ -129,7 +129,7 @@ class AudioManipulation:
             pred = 'angry'
         if not all(map(bool, (self.feature_extractor, self.model))):
             print('Внимание!!! feature_extractor и model не заданы!')
-        return pred
+        return pred, file_emotions
 
 
 if __name__ == "__main__":
