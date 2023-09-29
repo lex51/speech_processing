@@ -22,6 +22,8 @@ class AudioManipulation:
                            '.wav': AudioSegment.from_wav}
         # Получение пути к временному файлу
         self.temp_file_name = f'{tempfile.NamedTemporaryFile(delete=True).name}.wav'
+        # минимальная длительность аудиофайла 1 секунда
+        self.audio_min_duration = 1_000
         # максимальная длительность аудиофайла 10 минут
         self.audio_max_duration = 60_000 * 10
         # будем предсказывать на фрагментах по ХХ секунд
@@ -63,6 +65,21 @@ class AudioManipulation:
         sound.export(self.temp_file_name, format="wav")
         return self.temp_file_name, sound
 
+    def get_indexes(self, sound):
+        """
+        Получение индексов фрагментов аудио файла
+        :param sound: экземпляр AudioSegment
+        :return: список индексов
+        """
+        # Это самый простой способ получения списков индексов: поделить аудио файл на части
+        # заданной длительности self.duration
+        sound_parts = int(ceil(len(sound) / self.duration))
+        indexes = [self.duration * idx for idx in range(sound_parts)]
+        # Если хвост аудио файла больше минимальной длительности -> добавим еще индекс
+        if len(sound) - indexes[-1] > self.audio_min_duration:
+            indexes.append(len(sound) + 1)
+        return indexes
+
     def predict(self, path_to_file, max_duration=None, debug=False, show_file_info=False):
         """
         Предсказание эмоции для одного аудио файла
@@ -79,13 +96,34 @@ class AudioManipulation:
         temp_wav = str(temp_file_name).replace('.wav', '_part.wav')
         if debug:
             print(f'Временный файл: {temp_wav}')
+
         file_emotions = []
-        sound_parts = int(ceil(len(sound) / self.duration))
-        for idx in range(sound_parts):
+
+        # старая версия разбиения на части
+        # sound_parts = int(ceil(len(sound) / self.duration))
+        # for idx in range(sound_parts):
+        #     if debug:
+        #         print(f'Часть: {idx+1}', (idx * self.duration, (idx+1) * self.duration))
+        #
+        #     part_sound = sound[idx * self.duration:(idx + 1) * self.duration]
+
+        indexes = self.get_indexes(sound)
+        sound_parts = len(indexes) - 1
+        for idx, start_stop in enumerate(zip(indexes, indexes[1:])):
+            idx_start, idx_stop = start_stop
             if debug:
-                print(f'Часть: {idx + 1}', idx * self.duration, (idx + 1) * self.duration)
-            part_sound = sound[idx * self.duration:(idx + 1) * self.duration]
+                print(f'Часть: {idx + 1}', (idx_start, idx_stop))
+            part_sound = sound[idx_start: idx_stop]
+
+            # длительность меньше порога - не будем предсказывать
+            part_len = len(part_sound)
+            if part_len < self.audio_min_duration:
+                if debug:
+                    print(f'Обнаружен фрагмент с длительностью {part_len} менее допустимой')
+                continue
+
             part_sound.export(temp_wav, format="wav")
+
             waveform, sample_rate = torchaudio.load(temp_wav, normalize=True)
             transform = torchaudio.transforms.Resample(sample_rate, 16000)
             waveform = transform(waveform)
@@ -104,18 +142,21 @@ class AudioManipulation:
                     max_length=16000 * 10,
                     truncation=True
                 )
+                # в этом месте на 2-х файлах была ошибка - нужно исследовать
+                try:
+                    # Перенести данные на GPU
+                    inputs = {key: val.to(self.device) for key, val in inputs.items()}
 
-                # Перенести данные на GPU
-                inputs = {key: val.to(self.device) for key, val in inputs.items()}
-
-                logits = self.model(inputs['input_values'][0]).logits
-                predictions = torch.argmax(logits, dim=-1)
-                # Перенести результаты на CPU
-                pred = predictions.cpu().numpy()[0]
+                    logits = self.model(inputs['input_values'][0]).logits
+                    predictions = torch.argmax(logits, dim=-1)
+                    # Перенести результаты на CPU
+                    pred = predictions.cpu().numpy()[0]
+                except:
+                    pred = -1
             else:
                 pred = 0
 
-            predicted_emotion = self.num2emotion[pred]
+            predicted_emotion = self.num2emotion.get(pred)
             if debug:
                 print('Предсказана эмоция:', predicted_emotion)
             file_emotions.append(predicted_emotion)
