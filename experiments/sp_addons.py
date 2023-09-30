@@ -22,8 +22,8 @@ class AudioManipulation:
                            '.wav': AudioSegment.from_wav}
         # Получение пути к временному файлу
         self.temp_file_name = f'{tempfile.NamedTemporaryFile(delete=True).name}.wav'
-        # минимальная длительность аудиофайла 1 секунда
-        self.audio_min_duration = 1_000
+        # минимальная длительность аудиофайла 600 миллисекунд
+        self.audio_min_duration = 600
         # максимальная длительность аудиофайла 10 минут
         self.audio_max_duration = 60_000 * 10
         # будем предсказывать на фрагментах по ХХ секунд
@@ -62,6 +62,10 @@ class AudioManipulation:
 
         if max_duration is not None:
             sound = sound[:max_duration]
+
+        # Нормализация аудио
+        sound = sound.normalize()
+
         sound.export(self.temp_file_name, format="wav")
         return self.temp_file_name, sound
 
