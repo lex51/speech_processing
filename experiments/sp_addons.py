@@ -6,7 +6,9 @@ from glob import glob
 from pathlib import Path
 from statistics import mode as stat_mode
 
+import soundfile as sf
 from pydub import AudioSegment
+from pydub.silence import split_on_silence
 from transformers import HubertForSequenceClassification, Wav2Vec2FeatureExtractor
 
 __import__('warnings').filterwarnings("ignore")
@@ -19,7 +21,8 @@ class AudioManipulation:
         # поддерживаемые конвертеры
         self.converters = {'.ogg': AudioSegment.from_ogg,
                            '.mp3': AudioSegment.from_mp3,
-                           '.wav': AudioSegment.from_wav}
+                           '.wav': AudioSegment.from_wav,
+                           '.flv': AudioSegment.from_flv}
         # Получение пути к временному файлу
         self.temp_file_name = f'{tempfile.NamedTemporaryFile(delete=True).name}.wav'
         # минимальная длительность аудиофайла 600 миллисекунд
@@ -36,6 +39,8 @@ class AudioManipulation:
         self.num2emotion = {0: 'neutral', 1: 'angry', 2: 'positive', 3: 'sad', 4: 'other'}
         # предел недовольных фрагментов в долях от общего количества
         self.angry_threshold = .2
+        self.min_silence_len = 100
+        self.silence_thresh = -24
 
     def convert_to_wav(self, path_to_file, max_duration=None, show_file_info=False):
         """
@@ -44,13 +49,13 @@ class AudioManipulation:
         :param path_to_file: полный путь к файлу
         :param max_duration: максимальная длительность аудиофайла
         :param show_file_info: Печать информацию о файле: имя и длительность
-        :return: полный путь к .wav файлу и звуковой файл в формате .wav
+        :return: полный путь к .wav файлу и файл в формате .wav (экземпляр AudioSegment)
         """
         if not Path(path_to_file).is_file():
             raise FileNotFoundError(f"Ошибка!!! Файл {path_to_file} не найден!")
 
         suffix = Path(str(path_to_file).lower()).suffix
-        converter = self.converters.get(suffix)
+        converter = self.converters.get(suffix, AudioSegment.from_file)
         if converter is None:
             raise TypeError("Ошибка!!! Не поддерживаемый формат файла!")
 
@@ -69,25 +74,86 @@ class AudioManipulation:
         sound.export(self.temp_file_name, format="wav")
         return self.temp_file_name, sound
 
-    def get_indexes(self, sound):
+    def split_audio_to_words(self, sound, min_silence_len=None, silence_thresh=None):
+        """
+        Разделение звукового файла на фрагменты по паузам
+        :param sound: экземпляр AudioSegment
+        :param min_silence_len:
+        :param silence_thresh:
+        :return:
+        """
+        # Разделение звукового файла на фрагменты по паузам
+        if min_silence_len is None:
+            min_silence_len = self.min_silence_len
+        if silence_thresh is None:
+            silence_thresh = self.silence_thresh
+
+        chunks = split_on_silence(sound, keep_silence=True,
+                                  min_silence_len=min_silence_len,
+                                  silence_thresh=silence_thresh)
+        words_indexes = []
+        current_time = 0
+        # Перебор фрагментов и получение длительности каждого слова в миллисекундах
+        for chunk in chunks:
+            duration = len(chunk)
+            words_indexes.append((current_time, duration))
+            current_time += duration
+
+        return words_indexes
+
+    def get_indexes(self, sound, simple_indexes=True):
         """
         Получение индексов фрагментов аудио файла
         :param sound: экземпляр AudioSegment
+        :param simple_indexes: Формировать индексы простым способом
         :return: список индексов
         """
-        # Это самый простой способ получения списков индексов: поделить аудио файл на части
-        # заданной длительности self.duration
-        sound_parts = int(ceil(len(sound) / self.duration))
-        indexes = [self.duration * idx for idx in range(sound_parts)]
-        # Если хвост аудио файла больше минимальной длительности -> добавим еще индекс
-        if len(sound) - indexes[-1] > self.audio_min_duration:
-            indexes.append(len(sound) + 1)
+        if simple_indexes:
+            # Это самый простой способ получения списков индексов: поделить аудио файл
+            # на части заданной длительности self.duration
+            sound_parts = int(ceil(len(sound) / self.duration))
+            indexes = [self.duration * idx for idx in range(sound_parts)]
+            # Если хвост аудио файла больше минимальной длительности -> добавим еще индекс
+            if len(sound) - indexes[-1] > self.audio_min_duration:
+                indexes.append(len(sound) + 1)
+        else:
+            words_indexes = self.split_audio_to_words(sound)
+            indexes = [0]
+            current_time = 0
+            words_duration = 0
+            # Перебор фрагментов и получение длительности каждого слова в миллисекундах
+            for start, duration in words_indexes:
+                if words_duration + duration < self.duration:
+                    words_duration += duration
+                else:
+                    current_time += words_duration
+                    # Если длительность фрагмента > заданной длительности self.duration и
+                    # остаток до self.duration > 30% -> отрежем от фрагмента кусок
+                    if duration > self.duration and words_duration / self.duration < 0.7:
+                        words_duration = self.duration - words_duration
+                        current_time += words_duration
+                        duration -= words_duration
+                    indexes.append(current_time)
+                    words_duration = duration
+                    # пока фрагмент больше self.duration -> будем резать его на куски
+                    # заданной длительности self.duration
+                    while words_duration > self.duration:
+                        current_time += self.duration
+                        indexes.append(current_time)
+                        words_duration -= self.duration
+            # если "хвостик" меньше минимальной длительности фрагмента ->
+            # прибавим его к последнему фрагменту
+            if words_duration < self.audio_min_duration and len(indexes) > 1:
+                indexes.pop()
+            indexes.append(current_time + words_duration + 1)
         return indexes
 
-    def predict(self, path_to_file, max_duration=None, debug=False, show_file_info=False):
+    def predict(self, path_to_file, simple_indexes=True, max_duration=None, debug=False,
+                show_file_info=False):
         """
         Предсказание эмоции для одного аудио файла
         :param path_to_file: полный путь к файлу
+        :param simple_indexes: Формировать индексы простым способом
         :param max_duration: максимальная длительность аудиофайла
         :param debug: debug=True - режим отладки
         :param show_file_info: Печать информацию о файле: имя и длительность
@@ -111,12 +177,13 @@ class AudioManipulation:
         #
         #     part_sound = sound[idx * self.duration:(idx + 1) * self.duration]
 
-        indexes = self.get_indexes(sound)
+        indexes = self.get_indexes(sound, simple_indexes=simple_indexes)
         sound_parts = len(indexes) - 1
         for idx, start_stop in enumerate(zip(indexes, indexes[1:])):
             idx_start, idx_stop = start_stop
             if debug:
-                print(f'Часть: {idx + 1}', (idx_start, idx_stop))
+                print(f'Часть: {idx + 1}', (idx_start, idx_stop),
+                      'длительность:', idx_stop - idx_start)
             part_sound = sound[idx_start: idx_stop]
 
             # длительность меньше порога - не будем предсказывать
