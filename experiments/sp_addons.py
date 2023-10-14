@@ -153,7 +153,7 @@ class AudioManipulation:
         """
         Предсказание эмоции для одного аудио файла
         :param path_to_file: полный путь к файлу
-        :param simple_indexes: Формировать индексы простым способом
+        :param simple_indexes: Формировать индексы простым способом (True) или по паузам
         :param max_duration: максимальная длительность аудиофайла
         :param debug: debug=True - режим отладки
         :param show_file_info: Печать информацию о файле: имя и длительность
