@@ -8,6 +8,9 @@ from transformers import HubertForSequenceClassification, Wav2Vec2FeatureExtract
 
 __import__('warnings').filterwarnings("ignore")
 
+print(torch.__version__)  # 1.12.1+cpu
+print(__import__("transformers").__version__)  # 4.29.2
+
 # Каталог с датасетами
 DATASET_PATH = Path(r'D:\python-datasets\dusha')
 # Каталог с конкретным датасетом
@@ -18,7 +21,6 @@ filenames = [EXAMPLES.joinpath(file) for file in glob(f'{EXAMPLES}/**', recursiv
 
 # Указать устройство (GPU) для вычислений, если оно доступно
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(device)
 
 extractor_name = "facebook/hubert-large-ls960-ft"
 model_name = "xbgoose/hubert-speech-emotion-recognition-russian-dusha-finetuned"
@@ -26,7 +28,7 @@ feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(extractor_name)
 model = HubertForSequenceClassification.from_pretrained(model_name)
 model.to(device)
 
-print('Вангую...')
+print(f'Вангую на {device} ...')
 
 # создаем экземпляр класса
 audio_obj = AudioManipulation(feature_extractor=feature_extractor, model=model)
