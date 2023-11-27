@@ -1,0 +1,58 @@
+version: "3"
+services:
+
+
+  tg_bot:
+    build:
+      context: ./tg_bot
+      # args:
+    depends_on:
+    - redis
+    environment:
+      - REDIS_PASS=devpassword
+      - PYTHONUNBUFFERED=1
+
+
+  ########################
+  ###      Celery      ###
+  ########################
+  worker:
+    build:
+      context: ./queue
+      dockerfile: Dockerfile
+    depends_on:
+      - redis
+    environment:
+      - REDIS_PASS=devpassword
+    user: nobody
+
+  ##################################
+  ###  Monitor the Celery Tasks  ###
+  ##################################
+  # monitor:
+  #   build:
+  #     context: ./queue
+  #     dockerfile: Dockerfile
+  #   ports:
+  #    - "5555:5555"
+  #   entrypoint: flower
+  #   command:  -A tasks --port=5555 --broker=redis://:devpassword@redis:6379/0
+  #   depends_on:
+  #     - redis
+  #   environment:
+  #     - REDIS_PASS=devpassword
+
+  ########################
+  ###  Redis Database  ###
+  ########################
+  redis:
+    image: 'redis:3.0-alpine'
+    command: redis-server --requirepass devpassword
+    volumes:
+      - 'redis:/data'
+
+########################
+###  define volumes  ###
+########################
+volumes:
+    redis:
